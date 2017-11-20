@@ -60,6 +60,11 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 
 /**
  * Apply deterministic control to given particle in place
+ *
+ * @param particle Particle instance
+ * @param delta_t Time between time step t and t+1 in measurements [s]
+ * @param velocity Velocity of car from t to t+1 [m/s]
+ * @param yaw_rate Yaw rate of car from t to t+1 [rad/s]
  */
 void ParticleFilter::predictionParticle(Particle &particle, double delta_t, double velocity, double yaw_rate) {
 	// Deterministic control:

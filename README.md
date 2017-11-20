@@ -26,13 +26,18 @@ For the first GPS measurement:
 
 ```cpp
 /**
- * init Initializes particle filter by initializing particles to Gaussian
- *   distribution around first position and all the weights to 1.
+ * Initializes particle filter by:
+ *	1. initializing particles to Gaussian distribution around first GPS measurement
+ *	2. Set all the weights to 1.
  * @param x Initial x position [m] (simulated estimate from GPS)
  * @param y Initial y position [m]
  * @param theta Initial orientation [rad]
- * @param std[] Array of dimension 3 [standard deviation of x [m], standard deviation of y [m]
- *   standard deviation of yaw [rad]]
+ * @param std[] Array of dimension 3
+ *	[
+ *		standard deviation of x [m],
+ *		standard deviation of y [m],
+ *		standard deviation of yaw [rad]
+ *	]
  */
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	// Set up GPS measurement distributions:
@@ -67,7 +72,12 @@ Here Constant Turing Rate and Velocity Magnitude(CTRV) model is used.
 
 ```cpp
 /**
- * Apply control to given particle in place
+ * Apply deterministic control to given particle in place
+ *
+ * @param particle Particle instance
+ * @param delta_t Time between time step t and t+1 in measurements [s]
+ * @param velocity Velocity of car from t to t+1 [m/s]
+ * @param yaw_rate Yaw rate of car from t to t+1 [rad/s]
  */
 void ParticleFilter::predictionParticle(Particle &particle, double delta_t, double velocity, double yaw_rate) {
 	// Deterministic control:
@@ -90,11 +100,15 @@ After that, Gaussian actuation noise is added according to probabilistic assumpt
 
 ```cpp
 /**
- * prediction Predicts the state for the next time step
- *   using the process model.
+ * Predicts the state for the next time step using the CTRV process model.
+ *
  * @param delta_t Time between time step t and t+1 in measurements [s]
- * @param std_pos[] Array of dimension 3 [standard deviation of x [m], standard deviation of y [m]
- *   standard deviation of yaw [rad]]
+ * @param std_pos[] Array of dimension 3:
+ *		[
+ *			standard deviation of x [m],
+ *			standard deviation of y [m],
+ *   		standard deviation of yaw [rad]
+ *		]
  * @param velocity Velocity of car from t to t+1 [m/s]
  * @param yaw_rate Yaw rate of car from t to t+1 [rad/s]
  */
@@ -115,13 +129,21 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 		particle.theta += dist_theta(random_gen);
 	}
 }
+
 ```
 
 #### Update
 
-First, for each particle its observation-map correspondence is set up according to nearest neighbor rule:
+First, for each particle its observation-map correspondence is set up through nearest neighbor principle:
 
 ```cpp
+/**
+ * Set up observation-map correspondence for each particle using nearest neighbor rule
+ *
+ * @param particle Particle instance
+ * @param observations Vector of landmark observations
+ * @param map_landmarks Map class containing map landmarks
+ */
 void ParticleFilter::updateParticle(Particle &particle, const std::vector<LandmarkObs> &observations, const Map &map_landmarks) {
 	// Set up rotation matrix:
 	double R[2][2];
@@ -168,6 +190,14 @@ After that, posterior probability is calculated based on square error between ob
 Here particle with nearest landmark distance larger than sensor range will be filtered out directly to facilitate the evolution process:
 
 ```cpp
+/**
+ * Updates the weights for each particle based on the likelihood of the observed measurements.
+ *
+ * @param sensor_range Max valid sensor read [m]
+ * @param std_landmark[] Array of dimension 2 [Landmark measurement uncertainty [x [m], y [m]]]
+ * @param observations Vector of landmark observations
+ * @param map Map class containing map landmarks
+ */
 void ParticleFilter::updateWeights(
 	double sensor_range,
 	double std_landmark[],
@@ -190,10 +220,12 @@ void ParticleFilter::updateWeights(
 			const double xSqrErr = pow(particle.sense_x[j] - landmarks[particle.associations[j] - 1].x_f, 2);
 			const double ySqrErr = pow(particle.sense_y[j] - landmarks[particle.associations[j] - 1].y_f, 2);
 
-			if (xSqrErr > maxErr || ySqrErr > maxErr) {
+			if (xSqrErr > maxErr || ySqrErr > maxErr || xSqrErr + ySqrErr > maxErr) {
+				// Annihilate particle with invalid measurement:
 				weights[i] = 0.0;
 				break;
 			} else {
+				// Only calculate posterior for particle with all measurements valid:
 				weights[i] *= getWeight(xSqrErr, ySqrErr, std_landmark);
 			}
 		}
@@ -211,9 +243,9 @@ Algorithm performance on testing dataset is as follows:
 
 |   State  |               Accuracy             |
 |:--------:|:----------------------------------:|
-|     x    |                0.274               |
-|     y    |                0.269               |
-|   theta  |                0.009               |
+|     x    |                0.138               |
+|     y    |                0.126               |
+|   theta  |                0.004               |
 
 Which meets the required accuracy.
 
@@ -223,4 +255,4 @@ Which meets the required accuracy.
 
 ---
 
-Algorithm could finish processing on testing dataset within **53 seconds(less than 100 seconds)**, which meets the required efficiency.
+Algorithm could finish processing on testing dataset within **49 seconds(less than 100 seconds)**, which meets the required efficiency.
