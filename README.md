@@ -1,146 +1,226 @@
-# Overview
-This repository contains all the code needed to complete the final project for the Localization course in Udacity's Self-Driving Car Nanodegree.
+## README
 
-#### Submission
-All you will submit is your completed version of `particle_filter.cpp`, which is located in the `src` directory. You should probably do a `git pull` before submitting to verify that your project passes the most up-to-date version of the grading code (there are some parameters in `src/main.cpp` which govern the requirements on accuracy and run time.)
+### Technical Report for Localization through Particle Filter
 
-## Project Introduction
-Your robot has been kidnapped and transported to a new location! Luckily it has a map of this location, a (noisy) GPS estimate of its initial location, and lots of (noisy) sensor and control data.
+---
 
-In this project you will implement a 2 dimensional particle filter in C++. Your particle filter will be given a map and some initial localization information (analogous to what a GPS would provide). At each time step your filter will also get observation and control data. 
+<img src="writeup_images/demo.gif" width="100%" alt="Particle Filter for Localization"/>
 
-## Running the Code
-This project involves the Term 2 Simulator which can be downloaded [here](https://github.com/udacity/self-driving-car-sim/releases)
+The goals of this project are the following:
 
-This repository includes two files that can be used to set up and intall uWebSocketIO for either Linux or Mac systems. For windows you can use either Docker, VMware, or even Windows 10 Bash on Ubuntu to install uWebSocketIO.
+* Implement the **discretized Constant Turing Rate and Velocity Magnitude (CTRV)** motion model.
+* Implement the **particle filter (PF)** based localization algorithm.
+* Achieve the desired precision and efficiency on the given test dataset
 
-Once the install for uWebSocketIO is complete, the main program can be built and ran by doing the following from the project top directory.
+---
 
-1. mkdir build
-2. cd build
-3. cmake ..
-4. make
-5. ./particle_filter
+### Algorithm Workflow
 
-Alternatively some scripts have been included to streamline this process, these can be leveraged by executing the following in the top directory of the project:
+---
 
-1. ./clean.sh
-2. ./build.sh
-3. ./run.sh
+#### First Measurement Processing
 
-Tips for setting up your environment can be found [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
+For the first GPS measurement:
 
-Note that the programs that need to be written to accomplish the project are src/particle_filter.cpp, and particle_filter.h
+1. Particle swarm is initialized based on GPS measurement params.
 
-The program main.cpp has already been filled out, but feel free to modify it.
+```cpp
+/**
+ * init Initializes particle filter by initializing particles to Gaussian
+ *   distribution around first position and all the weights to 1.
+ * @param x Initial x position [m] (simulated estimate from GPS)
+ * @param y Initial y position [m]
+ * @param theta Initial orientation [rad]
+ * @param std[] Array of dimension 3 [standard deviation of x [m], standard deviation of y [m]
+ *   standard deviation of yaw [rad]]
+ */
+void ParticleFilter::init(double x, double y, double theta, double std[]) {
+	// Set up GPS measurement distributions:
+	normal_distribution<double> dist_x(x, std[0]), dist_y(y, std[1]);
+	normal_distribution<double> dist_theta(theta, std[2]);
 
-Here is the main protcol that main.cpp uses for uWebSocketIO in communicating with the simulator.
+	// Initialize particles:
+	for (int i = 0; i < num_particles; ++i) {
+		Particle particle;
+		// Set id:
+		particle.id = i;
+		// Set location:
+		particle.x = dist_x(random_gen); particle.y = dist_y(random_gen);
+		// Set heading:
+		particle.theta = dist_theta(random_gen);
+		// Set weight:
+		particle.weight = 1.0;
 
-INPUT: values provided by the simulator to the c++ program
+		particles.push_back(particle);
+		weights.push_back(1.0);
+	}
 
-// sense noisy position data from the simulator
-
-["sense_x"] 
-
-["sense_y"] 
-
-["sense_theta"] 
-
-// get the previous velocity and yaw rate to predict the particle's transitioned state
-
-["previous_velocity"]
-
-["previous_yawrate"]
-
-// receive noisy observation data from the simulator, in a respective list of x/y values
-
-["sense_observations_x"] 
-
-["sense_observations_y"] 
-
-
-OUTPUT: values provided by the c++ program to the simulator
-
-// best particle values used for calculating the error evaluation
-
-["best_particle_x"]
-
-["best_particle_y"]
-
-["best_particle_theta"] 
-
-//Optional message data used for debugging particle's sensing and associations
-
-// for respective (x,y) sensed positions ID label 
-
-["best_particle_associations"]
-
-// for respective (x,y) sensed positions
-
-["best_particle_sense_x"] <= list of sensed x positions
-
-["best_particle_sense_y"] <= list of sensed y positions
-
-
-Your job is to build out the methods in `particle_filter.cpp` until the simulator output says:
-
-```
-Success! Your particle filter passed!
+	is_initialized = true;
+}
 ```
 
-# Implementing the Particle Filter
-The directory structure of this repository is as follows:
+#### Predict
 
+First, each particle's state is transfered according to deterministic control.
+
+Here Constant Turing Rate and Velocity Magnitude(CTRV) model is used.
+
+```cpp
+/**
+ * Apply control to given particle in place
+ */
+void ParticleFilter::predictionParticle(Particle &particle, double delta_t, double velocity, double yaw_rate) {
+	// Deterministic control:
+	if (abs(yaw_rate) < 1e-7) {
+		// If no significant angular rotation:
+		particle.x += velocity * delta_t * cos(particle.theta);
+		particle.y += velocity * delta_t * sin(particle.theta);
+	} else {
+		// If there is significant angular rotation:
+		double r = velocity / yaw_rate;
+
+		particle.x += r * (+sin(particle.theta + yaw_rate * delta_t) - sin(particle.theta));
+		particle.y += r * (-cos(particle.theta + yaw_rate * delta_t) + cos(particle.theta));
+		particle.theta += yaw_rate * delta_t;
+	}
+}
 ```
-root
-|   build.sh
-|   clean.sh
-|   CMakeLists.txt
-|   README.md
-|   run.sh
-|
-|___data
-|   |   
-|   |   map_data.txt
-|   
-|   
-|___src
-    |   helper_functions.h
-    |   main.cpp
-    |   map.h
-    |   particle_filter.cpp
-    |   particle_filter.h
+
+After that, Gaussian actuation noise is added according to probabilistic assumption.
+
+```cpp
+/**
+ * prediction Predicts the state for the next time step
+ *   using the process model.
+ * @param delta_t Time between time step t and t+1 in measurements [s]
+ * @param std_pos[] Array of dimension 3 [standard deviation of x [m], standard deviation of y [m]
+ *   standard deviation of yaw [rad]]
+ * @param velocity Velocity of car from t to t+1 [m/s]
+ * @param yaw_rate Yaw rate of car from t to t+1 [rad/s]
+ */
+void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate) {
+	// Set up control noise distribution:
+	normal_distribution<double> dist_x(0.0, std_pos[0]), dist_y(0.0, std_pos[1]);
+	normal_distribution<double> dist_theta(0.0, std_pos[2]);
+
+	// Add deterministic control and random noise to each particle:
+	for (int i = 0; i < num_particles; ++i) {
+		// Apply deterministic control:
+		Particle &particle = particles[i];
+		predictionParticle(particle, delta_t, velocity, yaw_rate);
+
+		// Control noise:
+		particle.x += dist_x(random_gen);
+		particle.y += dist_y(random_gen);
+		particle.theta += dist_theta(random_gen);
+	}
+}
 ```
 
-The only file you should modify is `particle_filter.cpp` in the `src` directory. The file contains the scaffolding of a `ParticleFilter` class and some associated methods. Read through the code, the comments, and the header file `particle_filter.h` to get a sense for what this code is expected to do.
+#### Update
 
-If you are interested, take a look at `src/main.cpp` as well. This file contains the code that will actually be running your particle filter and calling the associated methods.
+First, for each particle its observation-map correspondence is set up according to nearest neighbor rule:
 
-## Inputs to the Particle Filter
-You can find the inputs to the particle filter in the `data` directory. 
+```cpp
+void ParticleFilter::updateParticle(Particle &particle, const std::vector<LandmarkObs> &observations, const Map &map_landmarks) {
+	// Set up rotation matrix:
+	double R[2][2];
+	R[0][0] = +cos(particle.theta); R[0][1] = -sin(particle.theta);
+	R[1][0] = +sin(particle.theta); R[1][1] = +cos(particle.theta);
 
-#### The Map*
-`map_data.txt` includes the position of landmarks (in meters) on an arbitrary Cartesian coordinate system. Each row has three columns
-1. x position
-2. y position
-3. landmark id
+	// Set up translation vector:
+	double t[2];
+	t[0] = particle.x; t[1] = particle.y;
 
-### All other data the simulator provides, such as observations and controls.
+	// Transform vehicle frame observation to global frame:
+	particle.sense_x.clear(); particle.sense_y.clear();
+	for (const LandmarkObs &observation: observations) {
+		particle.sense_x.push_back(R[0][0]*observation.x + R[0][1]*observation.y + t[0]);
+		particle.sense_y.push_back(R[1][0]*observation.x + R[1][1]*observation.y + t[1]);
+	}
 
-> * Map data provided by 3D Mapping Solutions GmbH.
+	// Identify landmark association:
+	const std::vector<Map::single_landmark_s> &landmarks = map_landmarks.landmark_list;
+	particle.associations.clear();
+	for (int i = 0; i < observations.size(); ++i) {
+			double minDist = numeric_limits<double>::max();
+			int minIdx = 0;
 
-## Success Criteria
-If your particle filter passes the current grading code in the simulator (you can make sure you have the current version at any time by doing a `git pull`), then you should pass! 
+			// Identify the nearest landmark:
+			for (int j = 0; j < landmarks.size(); ++j) {
+				double dist = (
+					pow(particle.sense_x[i] - landmarks[j].x_f, 2) + pow(particle.sense_y[i] - landmarks[j].y_f, 2)
+				);
 
-The things the grading code is looking for are:
+				if (dist < minDist) {
+					minDist = dist;
+					minIdx = j;
+				}
+			}
 
+			particle.associations.push_back(minIdx + 1);
+	}
+}
+```
 
-1. **Accuracy**: your particle filter should localize vehicle position and yaw to within the values specified in the parameters `max_translation_error` and `max_yaw_error` in `src/main.cpp`.
+After that, posterior probability is calculated based on square error between observation and its corresponding landmark.
 
-2. **Performance**: your particle filter should complete execution within the time of 100 seconds.
+Here particle with nearest landmark distance larger than sensor range will be filtered out directly to facilitate the evolution process:
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+```cpp
+void ParticleFilter::updateWeights(
+	double sensor_range,
+	double std_landmark[],
+	const std::vector<LandmarkObs> &observations,
+	const Map &map_landmarks
+) {
+	// Maximum square error:
+	const double maxErr = pow(sensor_range, 2);
+	const std::vector<Map::single_landmark_s> &landmarks = map_landmarks.landmark_list;
 
+	// For each particle:
+	for (int i = 0; i < num_particles; ++i) {
+		Particle &particle = particles[i];
 
+		// Set up measurement-map correspondence under particle pose:
+		updateParticle(particle, observations, map_landmarks);
 
+		// Calculate particle posterior:
+		for (int j = 0; j < particle.associations.size(); ++j) {
+			const double xSqrErr = pow(particle.sense_x[j] - landmarks[particle.associations[j] - 1].x_f, 2);
+			const double ySqrErr = pow(particle.sense_y[j] - landmarks[particle.associations[j] - 1].y_f, 2);
+
+			if (xSqrErr > maxErr || ySqrErr > maxErr) {
+				weights[i] = 0.0;
+				break;
+			} else {
+				weights[i] *= getWeight(xSqrErr, ySqrErr, std_landmark);
+			}
+		}
+	}
+}
+```
+
+---
+
+### Localization Accuracy
+
+---
+
+Algorithm performance on testing dataset is as follows:
+
+|   State  |               Accuracy             |
+|:--------:|:----------------------------------:|
+|     x    |                0.274               |
+|     y    |                0.269               |
+|   theta  |                0.009               |
+
+Which meets the required accuracy.
+
+---
+
+### Localization Efficiency
+
+---
+
+Algorithm could finish processing on testing dataset within **53 seconds(less than 100 seconds)**, which meets the required efficiency.
