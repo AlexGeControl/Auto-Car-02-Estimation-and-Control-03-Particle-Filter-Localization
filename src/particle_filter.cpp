@@ -21,13 +21,18 @@
 using namespace std;
 
 /**
- * init Initializes particle filter by initializing particles to Gaussian
- *   distribution around first position and all the weights to 1.
+ * Initializes particle filter by:
+ *	1. initializing particles to Gaussian distribution around first GPS measurement
+ *	2. Set all the weights to 1.
  * @param x Initial x position [m] (simulated estimate from GPS)
  * @param y Initial y position [m]
  * @param theta Initial orientation [rad]
- * @param std[] Array of dimension 3 [standard deviation of x [m], standard deviation of y [m]
- *   standard deviation of yaw [rad]]
+ * @param std[] Array of dimension 3
+ *	[
+ *		standard deviation of x [m],
+ *		standard deviation of y [m],
+ *		standard deviation of yaw [rad]
+ *	]
  */
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	// Set up GPS measurement distributions:
@@ -54,7 +59,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 }
 
 /**
- * Apply control to given particle in place
+ * Apply deterministic control to given particle in place
  */
 void ParticleFilter::predictionParticle(Particle &particle, double delta_t, double velocity, double yaw_rate) {
 	// Deterministic control:
@@ -73,11 +78,15 @@ void ParticleFilter::predictionParticle(Particle &particle, double delta_t, doub
 }
 
 /**
- * prediction Predicts the state for the next time step
- *   using the process model.
+ * Predicts the state for the next time step using the CTRV process model.
+ *
  * @param delta_t Time between time step t and t+1 in measurements [s]
- * @param std_pos[] Array of dimension 3 [standard deviation of x [m], standard deviation of y [m]
- *   standard deviation of yaw [rad]]
+ * @param std_pos[] Array of dimension 3:
+ *		[
+ *			standard deviation of x [m],
+ *			standard deviation of y [m],
+ *   		standard deviation of yaw [rad]
+ *		]
  * @param velocity Velocity of car from t to t+1 [m/s]
  * @param yaw_rate Yaw rate of car from t to t+1 [rad/s]
  */
@@ -99,6 +108,13 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	}
 }
 
+/**
+ * Set up observation-map correspondence for each particle using nearest neighbor rule
+ *
+ * @param particle Particle instance
+ * @param observations Vector of landmark observations
+ * @param map_landmarks Map class containing map landmarks
+ */
 void ParticleFilter::updateParticle(Particle &particle, const std::vector<LandmarkObs> &observations, const Map &map_landmarks) {
 	// Set up rotation matrix:
 	double R[2][2];
@@ -139,6 +155,16 @@ void ParticleFilter::updateParticle(Particle &particle, const std::vector<Landma
 	}
 }
 
+/**
+ * Calculate approximated posterior using square distance between nearest observation and landmark.
+ *
+ * @param xSqrErr Square error in X axis [m^2]
+ * @param std_landmark[] Array of dimension 2, landmark measurement uncertainty
+ *	[
+ *		x [m],
+ *		y [m]
+ *	]
+ */
 double ParticleFilter::getWeight(
 	const double xSqrErr,
 	const double ySqrErr,
@@ -154,6 +180,14 @@ double ParticleFilter::getWeight(
 	);
 }
 
+/**
+ * Updates the weights for each particle based on the likelihood of the observed measurements.
+ *
+ * @param sensor_range Max valid sensor read [m]
+ * @param std_landmark[] Array of dimension 2 [Landmark measurement uncertainty [x [m], y [m]]]
+ * @param observations Vector of landmark observations
+ * @param map Map class containing map landmarks
+ */
 void ParticleFilter::updateWeights(
 	double sensor_range,
 	double std_landmark[],
@@ -176,16 +210,21 @@ void ParticleFilter::updateWeights(
 			const double xSqrErr = pow(particle.sense_x[j] - landmarks[particle.associations[j] - 1].x_f, 2);
 			const double ySqrErr = pow(particle.sense_y[j] - landmarks[particle.associations[j] - 1].y_f, 2);
 
-			if (xSqrErr > maxErr || ySqrErr > maxErr) {
+			if (xSqrErr > maxErr || ySqrErr > maxErr || xSqrErr + ySqrErr > maxErr) {
+				// Annihilate particle with invalid measurement:
 				weights[i] = 0.0;
 				break;
 			} else {
+				// Only calculate posterior for particle with all measurements valid:
 				weights[i] *= getWeight(xSqrErr, ySqrErr, std_landmark);
 			}
 		}
 	}
 }
 
+/**
+ * Resample to generate the approximated posterior state distribution
+ */
 void ParticleFilter::resample() {
 	// Resample particles using Sebastian's wheel:
 	discrete_distribution<> newParticleIdx(weights.begin(), weights.end());
@@ -201,25 +240,6 @@ void ParticleFilter::resample() {
 
 	particles = newParticles;
 	weights = newWeights;
-}
-
-Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> associations, std::vector<double> sense_x, std::vector<double> sense_y)
-{
-	//particle: the particle to assign each listed association, and association's (x,y) world coordinates mapping to
-	// associations: The landmark id that goes along with each listed association
-	// sense_x: the associations x mapping already converted to world coordinates
-	// sense_y: the associations y mapping already converted to world coordinates
-
-	//Clear the previous associations
-	particle.associations.clear();
-	particle.sense_x.clear();
-	particle.sense_y.clear();
-
-	particle.associations= associations;
- 	particle.sense_x = sense_x;
- 	particle.sense_y = sense_y;
-
- 	return particle;
 }
 
 string ParticleFilter::getAssociations(Particle best)
